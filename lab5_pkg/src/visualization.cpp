@@ -1,3 +1,5 @@
+#include "rclcpp/rclcpp.hpp"
+#include <iostream>
 #include "scan_matching_skeleton/visualization.h"
 
 PointVisualizer::PointVisualizer(rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr& pub, string ns, string frame_id) : pub(pub), ns(ns),
@@ -8,7 +10,7 @@ PointVisualizer::PointVisualizer(rclcpp::Publisher<visualization_msgs::msg::Mark
   dots.pose.orientation.w = 1.0;
   dots.id = num_visuals;
   dots.type = visualization_msgs::msg::Marker::POINTS;
-  dots.scale.x = dots.scale.y = 0.005;
+  dots.scale.x = dots.scale.y = 0.05;
   ++num_visuals;
 }
 
@@ -20,9 +22,9 @@ void PointVisualizer::addPoints(vector<Point>& points, std_msgs::msg::ColorRGBA 
 }
 
 void PointVisualizer::publishPoints() {
-  dots.header.stamp = this->clock->now();
+  dots.header.stamp = rclcpp::Clock(RCL_ROS_TIME).now();
   pub->publish(dots);
-  // ROS_INFO("published dots");
+  RCLCPP_INFO(rclcpp::get_logger("visualization"), "%s %d", "published dots", dots.points.size());
   dots.points.clear();
   dots.colors.clear();
 }
@@ -35,7 +37,7 @@ void PointVisualizer::publishPoints() {
 //   line_list.pose.orientation.w = 1.0;
 //   line_list.id = num_visuals;
 //   line_list.type = visualization_msgs::msg::Marker::LINE_LIST;
-//   line_list.scale.x = 0.001;
+//   line_list.scale.x = 0.05;
 //   num_visuals++;
 // }
 

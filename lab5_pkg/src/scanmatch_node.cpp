@@ -10,7 +10,9 @@
 #include "ackermann_msgs/msg/ackermann_drive_stamped.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "visualization_msgs/msg/marker.hpp"
-/// TF: #include <tf/transform_broadcaster.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2/LinearMath/Quaternion.h>
 /// CHECK: include needed ROS msg type headers and libraries
 
 #include "scan_matching_skeleton/correspond.h"
@@ -22,7 +24,7 @@ using namespace std;
 const string &TOPIC_SCAN = "/scan";
 const string &TOPIC_POS = "/scan_match_location";
 const string &TOPIC_RVIZ = "/scan_match_debug";
-const string &FRAME_POINTS = "laser";
+const string &FRAME_POINTS = "ego_racecar/laser";
 
 const float RANGE_LIMIT = 10.0;
 
@@ -38,28 +40,24 @@ class ScanMatch : public rclcpp::Node
 private:
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pos_pub;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub;
+    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub = this->create_subscription<sensor_msgs::msg::LaserScan>(
+      TOPIC_SCAN, 1, std::bind(&ScanMatch::handleLaserScan, this, std::placeholders::_1));
 
     vector<Point> points;
     vector<Point> transformed_points;
     vector<Point> prev_points;
     vector<Correspondence> corresponds;
     vector<vector<int>> jump_table;
-    /// TF:
-    // Transform prev_trans, curr_trans;
-    // tf::TransformBroadcaster br;
-    // tf::Transform tr;
+    Transform prev_trans, curr_trans;
+    std::unique_ptr<tf2_ros::TransformBroadcaster> br = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
+    geometry_msgs::msg::TransformStamped tr;
 
     PointVisualizer *points_viz;
     // CorrespondenceVisualizer* corr_viz;
 
-    geometry_msgs::msg::PoseStamped msg;
+    geometry_msgs::msg::PoseStamped pose_msg;
     Eigen::Matrix3f global_tf;
     std_msgs::msg::ColorRGBA col;
-
-    // void lidar_callback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan_msg)
-    // {
-
-    // }
 
 public:
     ScanMatch() : Node("scanmatch_node")
@@ -93,24 +91,25 @@ public:
         computeJump(jump_table, prev_points);
         RCLCPP_INFO(this->get_logger(), "%s\n", "Starting Optimization");
 
-        // curr_trans = Transform();
+        curr_trans = Transform();
 
-        /// TF: while (count < MAX_ITER && (curr_trans != prev_trans || count == 0))
+        while (count < MAX_ITER && (curr_trans != prev_trans || count == 0))
         {
-            /// TF: transformPoints(points, curr_trans, transformed_points);
+            transformPoints(points, curr_trans, transformed_points);
 
-            //************************************************ Find correspondence between points of the current and previous frames  *************** ////
-            // **************************************************** getCorrespondence() function is the fast search function and getNaiveCorrespondence function is the naive search option **** ////
+            /// ********* Find correspondence between points of the current and previous frames  *************** ////
+            /// getCorrespondence() function is the fast search function and 
+            /// getNaiveCorrespondence() function is the naive search option.
 
             // getCorrespondence(prev_points, transformed_points, points, jump_table, corresponds, A * count * count + MIN_INFO);
 
             getNaiveCorrespondence(prev_points, transformed_points, points, jump_table, corresponds, A * count * count + MIN_INFO);
 
-            /// TF: prev_trans = curr_trans;
+            prev_trans = curr_trans;
             ++count;
 
-            // **************************************** We update the transforms here ******************************************* ////
-            /// TF: updateTransform(corresponds, curr_trans);
+            /// ********* We update the transforms here ******************************************* ////
+            updateTransform(corresponds, curr_trans);
         }
 
         col.r = 0.0;
@@ -122,7 +121,7 @@ public:
 
         RCLCPP_INFO(this->get_logger(), "Count: %i", count);
 
-        /// TF: this->global_tf = global_tf * curr_trans.getMatrix();
+        this->global_tf = global_tf * curr_trans.getMatrix();
 
         publishPos();
         prev_points = points;
@@ -154,26 +153,35 @@ public:
 
     void publishPos()
     {   
-        /// TF:
-        // msg.pose.position.x = global_tf(0, 2);
-        // msg.pose.position.y = global_tf(1, 2);
-        // msg.pose.position.z = 0;
-        // tf::Matrix3x3 tf3d;
-        // tf3d.setValue(static_cast<double>(global_tf(0, 0)), static_cast<double>(global_tf(0, 1)), 0,
-        //             static_cast<double>(global_tf(1, 0)), static_cast<double>(global_tf(1, 1)), 0, 0, 0, 1);
+        pose_msg.pose.position.x = global_tf(0, 2);
+        pose_msg.pose.position.y = global_tf(1, 2);
+        pose_msg.pose.position.z = 0;
+        tf2::Matrix3x3 tf3d;
+        tf3d.setValue(static_cast<double>(global_tf(0, 0)), static_cast<double>(global_tf(0, 1)), 0,
+                    static_cast<double>(global_tf(1, 0)), static_cast<double>(global_tf(1, 1)), 0, 0, 0, 1);
 
-        // tf::Quaternion q;
-        // tf3d.getRotation(q);
-        // msg.pose.orientation.x = q.x();
-        // msg.pose.orientation.y = q.y();
-        // msg.pose.orientation.z = q.z();
-        // msg.pose.orientation.w = q.w();
-        // msg.header.frame_id = "laser";
-        // msg.header.stamp = this->get_clock()->now();
-        // pos_pub.publish(msg);
-        // tr.setOrigin(tf::Vector3(global_tf(0, 2), global_tf(1, 2), 0));
-        // tr.setRotation(q);
-        // br.sendTransform(tf::StampedTransform(tr, this->get_clock()->now(), "map", "laser"));
+        tf2::Quaternion q;
+        tf3d.getRotation(q);
+        pose_msg.pose.orientation.x = q.x();
+        pose_msg.pose.orientation.y = q.y();
+        pose_msg.pose.orientation.z = q.z();
+        pose_msg.pose.orientation.w = q.w();
+        pose_msg.header.frame_id = FRAME_POINTS;
+        pose_msg.header.stamp = this->get_clock()->now();
+        pos_pub->publish(pose_msg);
+
+        tr.header.stamp = this->get_clock()->now();
+        tr.header.frame_id = "map";
+        tr.child_frame_id = "scanmatching_frame";
+        tr.transform.translation.x = global_tf(0, 2);
+        tr.transform.translation.y = global_tf(1, 2);
+        tr.transform.translation.z = 0;
+
+        tr.transform.rotation.x = q.x();
+        tr.transform.rotation.y = q.y();
+        tr.transform.rotation.z = q.z();
+        tr.transform.rotation.w = q.w();
+        br->sendTransform(tr);
     }
 
     ~ScanMatch() {}

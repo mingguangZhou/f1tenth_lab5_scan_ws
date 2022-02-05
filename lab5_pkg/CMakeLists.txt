@@ -22,7 +22,8 @@ foreach(PACKAGE
   sensor_msgs
   std_msgs
   visualization_msgs
-  Eigen3)
+  Eigen3
+  tf2_ros)
 
   find_package(${PACKAGE} REQUIRED)
 
@@ -38,7 +39,7 @@ include_directories(
 add_executable(scanmatch_node src/scanmatch_node.cpp src/transform.cpp src/correspond.cpp src/visualization.cpp)
 
 ament_target_dependencies(scanmatch_node 
-  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs visualization_msgs
+  rclcpp geometry_msgs ackermann_msgs nav_msgs sensor_msgs std_msgs visualization_msgs tf2_ros
 )
 
 # Install Cpp executables

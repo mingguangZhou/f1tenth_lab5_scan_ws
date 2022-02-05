@@ -1,4 +1,6 @@
 # Lab 5: Scan Matching
 
-## I. Learning Goals
+Please see the attached `lab5.pdf` for instructions.
+
+For submission, see `submission.md`.
 
