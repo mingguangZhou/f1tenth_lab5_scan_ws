@@ -2,5 +2,5 @@
 
 Please see the attached [lab5.pdf](lab5.pdf) for instructions.
 
-For submission, see [submission.md](submission.md).
+For submission, see [SUBMISSION.md](SUBMISSION.md).
 
