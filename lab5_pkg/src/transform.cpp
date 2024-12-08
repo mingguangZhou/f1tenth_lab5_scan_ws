@@ -1,4 +1,5 @@
 #include "scan_matching_skeleton/transform.h"
+#include <iostream>
 #include <cmath>
 #include <Eigen/Geometry>
 #include <complex>
@@ -305,21 +306,64 @@ void updateTransform(vector<Correspondence> &corresponds, Transform &curr_trans)
     // Calculate M and g
     for (Correspondence c : corresponds)
     {
+      // Compute M_i
+      Eigen::MatrixXf M_i(2, 4);
+      if (c.po != nullptr) {
+          float po_x = c.po->getX();
+          float po_y = c.po->getY();
+          M_i << 1, 0, po_x, -po_y,
+                0, 1, po_y,  po_x;
+      } else {
+          M_i.setZero();
+      }
+      // Get n_i and compute C_i
+      Eigen::Vector2f n_i = c.getNormalNorm();
+      Eigen::Matrix2f C_i = n_i * n_i.transpose();
+      // Get pi_i from c
+      Eigen::Vector2f pi_i = c.getPiVec();
+      // Update M and g
+      M = M + M_i.transpose() * C_i * M_i; // Matrix operation: M += M_i' * C_i * M_i
+      g = g - 2 * pi_i.transpose() * C_i * M_i; // Matrix operation: g -= 2 * pi_i' * C_i * M_i
     }
 
     // Define sub-matrices A, B, D from M
     Eigen::Matrix2f A, B, D;
+    Eigen::Matrix2f M_11 = M.block<2, 2>(0, 0); // Top-left block
+    Eigen::Matrix2f M_12 = M.block<2, 2>(0, 2); // Top-right block
+    Eigen::Matrix2f M_21 = M.block<2, 2>(2, 0); // Bottom-left block
+    Eigen::Matrix2f M_22 = M.block<2, 2>(2, 2); // Bottom-right block
+    A = 2 * M_11;
+    B = 2 * M_12;
+    D = 2 * M_22;
 
     //define S and S_A matrices from the matrices A B and D
     Eigen::Matrix2f S;
     Eigen::Matrix2f S_A;
-    float S_tr = S(0, 0) + S(1, 1);
-    float S_det = S(0, 0) * S(1, 1) - S(1, 0) * S(0, 1);
+    Eigen::Matrix2f A_inv = A.inverse(); // Inverse of A
+    S = D - B.transpose() * A_inv * B; 
+    
+    float S_tr = S(0, 0) + S(1, 1); // Trace of S 
+    float S_det = S(0, 0) * S(1, 1) - S(1, 0) * S(0, 1); // Determinant of S
+    if (S_det != 0) {
+      Eigen::Matrix2f S_inv = S.inverse(); // Compute S^-1
+      // Compute S^A = det(S) * S^-1
+      S_A = S_det * S_inv;
+      // Output S^A for debugging or further use
+      // std::cout << "S^A:\n" << S_A << std::endl;
+    } else {
+      std::cerr << "Error: Determinant of S is zero. Inverse cannot be computed!" << std::endl;
+    }
 
     //find the coefficients of the quadratic function of lambda
     float pow_2;
     float pow_1;
     float pow_0;
+    Eigen::Vector2f g_relevant = g.block<1, 2>(0, 0).transpose();  // Use the first two components of g
+    pow_2 = 4 * (g_relevant.transpose() * (A_inv * B * B.transpose() * A_inv.transpose() - A_inv * B) * g_relevant).value();
+    pow_1 = 4 * (g_relevant.transpose() * (A_inv * B * S_A * B.transpose() * A_inv.transpose() - A_inv * B * S_A) * g_relevant).value();
+    pow_0 = (g_relevant.transpose() * (A_inv * B * S_A * S_A * B.transpose() * A_inv.transpose() - A_inv * B * S_A * S_A) * g_relevant).value();
+
+
 
     // find the value of lambda by solving the equation formed. You can use the greatest real root function
     // float lambda = greatest_real_root(-16, -16 * S_tr, pow_2, pow_1, pow_0);

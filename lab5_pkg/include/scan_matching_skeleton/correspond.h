@@ -87,7 +87,8 @@ struct Correspondence{
 };
 
 void getCorrespondence(vector<Point>& old_points, vector<Point>& trans_points, vector<Point>& points,
-                        vector< vector<int> >& jump_table, vector<Correspondence>& c, float prob);
+                        vector< vector<int> >& jump_table, vector<Correspondence>& c, float prob,
+                        float angle_increment_rad);
 
 void getNaiveCorrespondence(vector<Point>& old_points, vector<Point>& trans_points, vector<Point>& points,
                                                 vector< vector<int> >& jump_table, vector<Correspondence>& c, float prob);

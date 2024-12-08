@@ -24,7 +24,7 @@ void PointVisualizer::addPoints(vector<Point>& points, std_msgs::msg::ColorRGBA 
 void PointVisualizer::publishPoints() {
   dots.header.stamp = rclcpp::Clock(RCL_ROS_TIME).now();
   pub->publish(dots);
-  RCLCPP_INFO(rclcpp::get_logger("visualization"), "%s %d", "published dots", dots.points.size());
+  // RCLCPP_INFO(rclcpp::get_logger("visualization"), "%s %d", "published dots", dots.points.size());
   dots.points.clear();
   dots.colors.clear();
 }
