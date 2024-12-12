@@ -1,5 +1,6 @@
 #include "scan_matching_skeleton/correspond.h"
 #include "cmath"
+#include <iostream>
 
 using namespace std;
 
@@ -92,20 +93,56 @@ void getCorrespondence(vector<Point> &old_points, vector<Point> &trans_points, v
     // True if search is finished in the up (down) direction.
     bool up_stopped = false, down_stopped = false;
 
+    int loop_counter = 0;
+    const int max_loops = 500; // Arbitrary large number
 
     // select direction to search
     // Until the search is stopped in both directions...
     while (!(up_stopped && down_stopped))
     {
-      // Should we try to explore up or down?
-      bool now_up = !up_stopped & (last_dist_up < last_dist_down);
-      // Now two symmetric chunks of code, the now_up and the !now_up
+      if (++loop_counter > max_loops)
+      {
+          // std::cerr << "Error: Infinite loop detected in correspondence search!" << std::endl;
+          break;
+      }
+
+      // Start of loop
+      std::cout << "[DEBUG] Start of loop: up = " << up << ", down = " << down
+                << ", up_stopped = " << up_stopped
+                << ", down_stopped = " << down_stopped 
+                << ", old_size = " << old_size << std::endl;
       
+      
+      // Should we try to explore up or down?
+      bool now_up = false;
+      if (!up_stopped && !down_stopped)
+      {
+          now_up = (last_dist_up < last_dist_down);
+      }
+      else if (!up_stopped)
+      {
+          now_up = true;
+      }
+      else if (!down_stopped)
+      {
+          now_up = false;
+      }
+      std::cout << "[DEBUG] Direction chosen: " << (now_up ? "up" : "down") << std::endl;
+      std::cout << "[DEBUG] last_dist_up: " << last_dist_up 
+                << ", last_dist_down: " << last_dist_down 
+                << ", now_up = " << now_up << std::endl;
+   
+      // Now two symmetric chunks of code, the now_up and the !now_up
       // search in up direction
       if(now_up)
       {
         // If we have finished the points to search, we stop.
-        if (up >= old_size) {up_stopped = true; continue;}
+        if (up >= old_size) 
+        {
+          up_stopped = true;
+          std::cout << "[DEBUG] Stopping upward search: up = " << up << std::endl; 
+          continue;
+        }
         // Distance from current point to the 'up' point
         last_dist_up = trans_points[ind_trans].distToPoint2(&old_points[up]);
         // If it is less than the best point, up is our best guess so far.
@@ -118,24 +155,45 @@ void getCorrespondence(vector<Point> &old_points, vector<Point> &trans_points, v
           float theta_delta = old_points[up].theta - trans_points[ind_trans].theta;
           float min_dist_up = sin(theta_delta) * trans_points[ind_trans].r;
           // If going up we can’t make better than best_dist, then we stop searching in the "up" direction
-          if ((min_dist_up * min_dist_up) > min_dist) {up_stopped = true; continue;}
+          if ((min_dist_up * min_dist_up) > min_dist)
+          {
+              up_stopped = true;
+              std::cout << "[DEBUG] Early stopping upward search." << std::endl;
+              continue;
+          }
           
           // If we are moving away, then we can implement the jump tables optimization.
           up = // Next point to examine is...
             (old_points[up].r < trans_points[ind_trans].r) ? // is current scan point longer?
             jump_table[up][UP_BIG] // then jump to a further point
             :jump_table[up][UP_SMALL]; // else, to a closer one.
+
+          // Debug updated up
+          std::cout << "[DEBUG] Updated up with jump table: " << up << std::endl;
+          
+          // Add safety check here
+          if (up >= old_size || jump_table[up][UP_BIG] >= old_size || jump_table[up][UP_SMALL] >= old_size)
+          {
+              up_stopped = true;
+              std::cout << "[DEBUG] Stopping upward search due to jump table. " << std::endl;
+          }
         } else { 
           // If we are moving towards "start_cell", we can’t do any ot the previous optimizations and we just move to the next point.
           up++;
+          std::cout << "[DEBUG] Update up by ++: up = " << up << std::endl; 
         }
       } // if(now_up)
 
       // repeat in down direction
       // This is the specular part of the previous chunk of code.
-      if(!now_up)
+      else
       {
-        if (down < 0) { down_stopped = true; continue;}
+        if (down < 0)
+        {
+          down_stopped = true;
+          std::cout << "[DEBUG] Stopping downward search: down = " << down << std::endl;
+          continue;
+        }
 
         last_dist_down = trans_points[ind_trans].distToPoint2(&old_points[down]);
         if (last_dist_down < min_dist) { best = down; min_dist = last_dist_down;}
@@ -148,19 +206,41 @@ void getCorrespondence(vector<Point> &old_points, vector<Point> &trans_points, v
           if ((min_dist_down * min_dist_down) > min_dist)
           {
             down_stopped = true;
+            std::cout << "[DEBUG] Early stopping downward search." << std::endl;
             continue;
           }
 
           down = (old_points[down].r < trans_points[ind_trans].r) ? 
                   jump_table[down][DOWN_BIG] : jump_table[down][DOWN_SMALL];
+
+          // Debug updated down
+          std::cout << "[DEBUG] Updated down after jump table: " << down << std::endl;
+          
+          // Add safety check here
+          if (down < 0 || jump_table[down][DOWN_BIG] < 0 || jump_table[down][DOWN_SMALL] < 0)
+          {
+              down_stopped = true;
+              std::cout << "[DEBUG] Stopping downward search due to jump table." << std::endl;
+          }
         }
         else
         {
           down--;
+          std::cout << "[DEBUG] Update down by ++: down = " << down << std::endl; 
         }
       }
+
+      // End of loop
+      std::cout << "[DEBUG] End of loop: up = " << up << ", down = " << down
+                << ", up_stopped = " << up_stopped
+                << ", down_stopped = " << down_stopped << std::endl;
+      std::cout << "[DEBUG] Best index of this loop: " << best 
+                << ", with distance: " << min_dist << std::endl;
     }
 
+    std::cout << "[DEBUG] Best old point: " << best 
+              << ", for index of trans point: " << ind_trans
+              << ", with distance: " << min_dist << std::endl;
     // Find the second best point
     int second_best = (best > 0) ? best - 1 : best + 1;
 
